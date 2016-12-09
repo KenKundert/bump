@@ -1,0 +1,29 @@
+Install using
+
+    pip3 install .
+
+To create initial version of configuration file:
+
+    bump initialize
+
+Configuration file is .bump.cfg.
+
+Set initial values for version number components.
+Indicate which variables should be updated when date and version numbers change.
+
+A typical configuration file looks like::
+
+    date_fmt = 'YYYY-MM-DD'
+    major = 1
+    minor = 6
+    patch = 1
+    date = ['bump __released__']
+    version = ['bump __version__', 'setup.py version']
+
+The strings in date and version are split once with the first piece being a file 
+name and the second being the name of the variable within that file.
+
+To run:
+    bump patch
+    bump minor
+    bump major
