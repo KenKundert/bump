@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Bump version.
+Bump version and release date.
+
+The directory must be clean (no uncommitted changes) for the bump to occur. Tag 
+is applied for minor and major release, but not patches.
 
 usage:
     bump [options] major
@@ -16,15 +19,17 @@ options:
 """
 
 from docopt import docopt
-from inform import display, fatal, Inform, os_error, terminate, warn
+from inform import (
+    display, fatal, Inform, os_error, render, terminate, warn, is_collection
+)
 from pathlib import Path
-from shlib import rm
+from shlib import rm, Run
 from textwrap import dedent
 from arrow import now
 import re
 
-__version__ = '1.6.1'
-__released__ = '2016-12-09'
+__version__ = '1.8.6'
+__released__ = '2017-07-19'
 
 CFG_FILE = '.bump.cfg'
 INITIAL_CFG_FILE_VALUES = {
@@ -47,8 +52,40 @@ ASSIGNMENT_REGEX = r'''\b%s(\s*)([:=])(\s*)(['"]?)%s(['"]?)'''
 DATE_REGEX = r'\d\d\d\d-\d\d-\d\d'
 VERSION_REGEX = r'\d+\.\d+\.\d+'
 NEW_EXTENSION = '.new'
+REVISION_CONTROL_COMMANDS = {
+    'git': {
+        'status_command': "git status -s",
+        'commit_command': [
+            'git add .',
+            "git commit -m 'bump version to {version}'",
+        ],
+        'tag_command': [
+            "git tag -s v{version} -m 'bump version to {version}'",
+            'git push origin v{version}'
+        ],
+    },
+    'hg': {
+        'status_command': "hg status -q",
+        'commit_command': "hg commit -m 'bump version to {version}'",
+        'tag_command': "hg tag v{version} -m 'bump version to {version}'",
+    },
+}
 
 try:
+    if Path('.git').exists():
+        status_command = REVISION_CONTROL_COMMANDS['git']['status_command']
+        commit_command = REVISION_CONTROL_COMMANDS['git']['commit_command']
+        tag_command = REVISION_CONTROL_COMMANDS['git']['tag_command']
+    elif Path('.hg').exists():
+        status_command = REVISION_CONTROL_COMMANDS['hg']['status_command']
+        commit_command = REVISION_CONTROL_COMMANDS['hg']['commit_command']
+        tag_command = REVISION_CONTROL_COMMANDS['hg']['tag_command']
+    else:
+        status_command = None
+        commit_command = []
+        tag_command = []
+        warn('unrecognized revision control system.')
+
     cmdline = docopt(__doc__)
     Inform(quiet = cmdline['--quiet'])
     extension = NEW_EXTENSION if cmdline['--trialrun'] else ''
@@ -82,13 +119,33 @@ try:
         cfg['major'] += 1
         cfg['minor'] = 0
         cfg['patch'] = 0
+        tag = '%s.%s' % (cfg['major'], cfg['minor'])
     elif cmdline['minor']:
         cfg['minor'] += 1
         cfg['patch'] = 0
+        tag = '%s.%s' % (cfg['major'], cfg['minor'])
     elif cmdline['patch']:
         cfg['patch'] += 1
+        tag = None
     else:
         raise NotImplementedError
+
+    # check for a clean release
+    if status_command:
+        cmd = status_command.format()
+        try:
+            check = Run(cmd, 'sOeW')
+        except OSError as err:
+            fatal(err, 'when running:', cmd)
+        clean = check.stdout.strip() == ''
+        if cmdline['--trialrun']:
+            display('clean' if clean else 'dirty', 'release.')
+        if not clean:
+            if cmdline['--trialrun']:
+                warn('uncommitted files.')
+            else:
+                fatal('uncommitted files.')
+
     print('Updating to version %s.%s.%s' % (
         cfg['major'], cfg['minor'], cfg['patch']
     ))
@@ -107,7 +164,7 @@ try:
             display('date updated.', culprit=filename)
         elif not cmdline['--quiet']:
             if not matcher.search(contents):
-                warn('assignment not found.', culprit=(filename, varname))
+                warn('date assignment not found.', culprit=(filename, varname))
 
     # update the version
     new_version = '.'.join([
@@ -119,7 +176,6 @@ try:
         filename, varname = pair.split(None, 1)
         rm(filename + NEW_EXTENSION)
         contents = Path(filename).read_text()
-        #matcher = re.compile(ASSIGNMENT_REGEX % (varname, re.escape(current_version)))
         matcher = re.compile(ASSIGNMENT_REGEX % (varname, VERSION_REGEX))
         new_assign = r'%s\1\2\3\g<5>%s\5' % (varname, new_version)
         new_contents = matcher.sub(new_assign, contents)
@@ -128,14 +184,44 @@ try:
             display('version updated.', culprit=filename)
         elif not cmdline['--quiet']:
             if not matcher.search(contents):
-                warn('assignment not found.', culprit=(filename, varname))
+                warn('version assignment not found.', culprit=(filename, varname))
 
     # update the config file
-        rm(CFG_FILE + NEW_EXTENSION)
-        Path(CFG_FILE + extension).write_text(
-            INITIAL_CFG_FILE_CONTENTS.format(**cfg)
-        )
+    entries = []
+    for k, v in cfg.items():
+        if k[0] != '_':
+            entries.append(f'{k} = {render(v)}')
+    content = '\n'.join(entries) + '\n'
+    rm(CFG_FILE + NEW_EXTENSION)
+    Path(CFG_FILE + extension).write_text(content)
 
+    # commit the changes
+    if not is_collection(commit_command):
+        commit_command = [commit_command]
+    for command in commit_command:
+        cmd = command.format(version=new_version)
+        if cmdline['--trialrun']:
+            display(cmd)
+        else:
+            try:
+                Run(cmd, 'soeW')
+            except OSError as err:
+                fatal(err, 'when running:', cmd)
+
+    # tag the commit
+    if tag:
+        if not is_collection(tag_command):
+            tag_command = [tag_command]
+        for command in tag_command:
+            cmd = command.format(version=tag)
+            display('applying tag:', tag)
+            if cmdline['--trialrun']:
+                display(cmd)
+            else:
+                try:
+                    Run(cmd, 'soeW')
+                except OSError as err:
+                    fatal(err, 'when running:', cmd)
 except OSError as err:
     fatal(os_error(err))
 
