@@ -28,18 +28,18 @@ from textwrap import dedent
 from arrow import now
 import re
 
-__version__ = '1.8.6'
-__released__ = '2017-07-19'
+__version__ = '1.9.0'
+__released__ = '2021-01-27'
 
 CFG_FILE = '.bump.cfg'
-INITIAL_CFG_FILE_VALUES = {
-    'date_fmt': 'YYYY-MM-DD',
-    'major': 0,
-    'minor': 0,
-    'patch': 0,
-    'date': ['filename variablename'],
-    'version': ['filename variablename'],
-}
+INITIAL_CFG_FILE_VALUES = dict(
+    date_fmt = 'YYYY-MM-DD',
+    major = 0,
+    minor = 0,
+    patch = 0,
+    date = ['filename variablename'],
+    version = ['filename variablename'],
+)
 INITIAL_CFG_FILE_CONTENTS = dedent("""
     date_fmt = {date_fmt!r}
     major = {major}
@@ -135,8 +135,8 @@ try:
         cmd = status_command.format()
         try:
             check = Run(cmd, 'sOeW')
-        except OSError as err:
-            fatal(err, 'when running:', cmd)
+        except OSError as e:
+            fatal(e, 'when running:', cmd)
         clean = check.stdout.strip() == ''
         if cmdline['--trialrun']:
             display('clean' if clean else 'dirty', 'release.')
@@ -205,8 +205,8 @@ try:
         else:
             try:
                 Run(cmd, 'soeW')
-            except OSError as err:
-                fatal(err, 'when running:', cmd)
+            except OSError as e:
+                fatal(e, 'when running:', cmd)
 
     # tag the commit
     if tag:
@@ -220,13 +220,7 @@ try:
             else:
                 try:
                     Run(cmd, 'soeW')
-                except OSError as err:
-                    fatal(err, 'when running:', cmd)
-except OSError as err:
-    fatal(os_error(err))
-
-# calculator.py:versionDate = '2016-05-25'
-# calculator.py:        """ % (versionNumber, versionDate)))
-# manpage.py:from calculator import versionDate, versionNumber
-# manpage.py:    :Date: {date}
-# manpage.py:        date=versionDate
+                except OSError as e:
+                    fatal(e, 'when running:', cmd)
+except OSError as e:
+    fatal(os_error(e))
