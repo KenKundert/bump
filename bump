@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Description {{{1
 """
 Bump version and release date.
 
@@ -6,221 +7,316 @@ The directory must be clean (no uncommitted changes) for the bump to occur. Tag
 is applied for minor and major release, but not patches.
 
 usage:
-    bump [options] major
-    bump [options] minor
+    bump [options] major [dev|alpha|beta|rc|release]
+    bump [options] minor [dev|alpha|beta|rc|release]
     bump [options] patch
-    bump [options] initialize
+    bump [options] [dev|alpha|beta|rc|release]
+    bump [options]
+    bump initialize
     bump version
+    bump [options] clean
 
 options:
     -h, --help      show this help message and exit
     -q, --quiet     run without narration
     -t, --trialrun  create new files rather than updating existing files
 """
+__version__ = "2.0.0-alpha.0"
+__released__ = "2022-6-5"
 
+
+# Imports {{{1
 from docopt import docopt
 from inform import (
-    display, fatal, Inform, os_error, render, terminate, warn, is_collection
+    Inform, Error,
+    codicil, conjoin, display, error, full_stop, is_collection, os_error,
+    output, terminate, warn,
 )
-from pathlib import Path
-from shlib import rm, Run
+from shlib import rm, Run, to_path
 from textwrap import dedent
 from arrow import now
+from voluptuous import Schema, Required, Invalid, MultipleInvalid
 import re
+import nestedtext as nt
 
-__version__ = '1.9.0'
-__released__ = '2021-01-27'
 
-CFG_FILE = '.bump.cfg'
+# Globals {{{1
+CFG_FILE = ".bump.cfg.nt"
 INITIAL_CFG_FILE_VALUES = dict(
-    date_fmt = 'YYYY-MM-DD',
     major = 0,
     minor = 0,
     patch = 0,
-    date = ['filename variablename'],
-    version = ['filename variablename'],
+    version = 0,
+    type = "release",
+    files = [
+        dict(
+            path="⟪file-path⟫",
+            date="⟪date-variable⟫",
+            version="⟪version-variable⟫"
+        )
+    ]
 )
-INITIAL_CFG_FILE_CONTENTS = dedent("""
-    date_fmt = {date_fmt!r}
-    major = {major}
-    minor = {minor}
-    patch = {patch}
-    date = {date!r}
-    version = {version!r}
-""").strip()
-ASSIGNMENT_REGEX = r'''\b%s(\s*)([:=])(\s*)(['"]?)%s(['"]?)'''
-DATE_REGEX = r'\d\d\d\d-\d\d-\d\d'
-VERSION_REGEX = r'\d+\.\d+\.\d+'
-NEW_EXTENSION = '.new'
+RELEASE_TYPES = ["dev", "alpha", "beta", "rc", "release"]
+ASSIGNMENT_REGEX = r"""\b{}(\s*)([:=])(\s*)(["']?){}(['"]?)"""
+DATE_FMT = "YYYY-MM-DD"
+DATE_REGEX = r"\d\d\d\d-\d?\d-\d?\d"
+VERSION_REGEX = r"\d+\.\d+\.\d+(?:-\w+\.\d+)?"
+NEW_EXTENSION = ".new"
 REVISION_CONTROL_COMMANDS = {
-    'git': {
-        'status_command': "git status -s",
-        'commit_command': [
-            'git add .',
+    "git": {
+        "status_command": "git status -s",
+        "commit_command": [
+            "git add .",
             "git commit -m 'bump version to {version}'",
         ],
-        'tag_command': [
+        "tag_command": [
             "git tag -s v{version} -m 'bump version to {version}'",
-            'git push origin v{version}'
+            "git push origin v{version}"
         ],
     },
-    'hg': {
-        'status_command': "hg status -q",
-        'commit_command': "hg commit -m 'bump version to {version}'",
-        'tag_command': "hg tag v{version} -m 'bump version to {version}'",
+    "hg": {
+        "status_command": "hg status -q",
+        "commit_command": "hg commit -m 'bump version to {version}'",
+        "tag_command": "hg tag v{version} -m 'bump version to {version}'",
     },
 }
 
+# create schema for config file {{{2
+voluptuous_error_msg_mapings = {
+    "extra keys not allowed": "unknown key",
+}
+
+def downcase(key, _):
+    return key.lower()
+
+def as_number(arg):
+    try:
+        value = int(arg)
+        if value >= 0:
+            return value
+    except ValueError:
+        pass
+    raise Invalid("expected whole number.")
+
+def as_release_type(arg):
+    if arg in RELEASE_TYPES:
+        return arg
+    raise Invalid(f"unrecognized type, choose from {conjoin(RELEASE_TYPES)}.")
+
+def as_path(arg):
+    path = to_path(arg)
+    if not path.exists():
+        raise Invalid(f"path does not exist.")
+    return path
+
+def as_identifier(arg):
+    if arg.isidentifier():
+        return arg
+    raise Invalid(f"expected an identifier.")
+
+validate_config = Schema({
+    Required("major"): as_number,
+    Required("minor"): as_number,
+    Required("patch"): as_number,
+    Required("iteration"): as_number,
+    Required("type"): as_release_type,
+    Required("files"): {as_path: dict(date=as_identifier, version=as_identifier)}
+})
+
+
+# utility functions {{{1
+def render_version(cfg):
+    if cfg["type"] == "release":
+        return "{major}.{minor}.{patch}".format(**cfg)
+    else:
+        return "{major}.{minor}.{patch}-{type}.{iteration}".format(**cfg)
+
 try:
-    if Path('.git').exists():
-        status_command = REVISION_CONTROL_COMMANDS['git']['status_command']
-        commit_command = REVISION_CONTROL_COMMANDS['git']['commit_command']
-        tag_command = REVISION_CONTROL_COMMANDS['git']['tag_command']
-    elif Path('.hg').exists():
-        status_command = REVISION_CONTROL_COMMANDS['hg']['status_command']
-        commit_command = REVISION_CONTROL_COMMANDS['hg']['commit_command']
-        tag_command = REVISION_CONTROL_COMMANDS['hg']['tag_command']
+    # Read the command line {{{1
+    cmdline = docopt(__doc__)
+    Inform(quiet = cmdline["--quiet"])
+    extension = NEW_EXTENSION if cmdline["--trialrun"] else ""
+
+    # clean old --trialrun files if requested {{{1
+    if cmdline["clean"]:
+        to_remove = list(to_path('.').glob("**/*" + NEW_EXTENSION))
+        if cmdline["--trialrun"]:
+            if to_remove:
+                output("To remove:", *to_remove, sep="\n    ")
+            else:
+                output("Nothing to remove.")
+        else:
+            rm(to_remove)
+        terminate()
+
+    # Determine the revision control system in use {{{1
+    if to_path(".git").exists():
+        status_command = REVISION_CONTROL_COMMANDS["git"]["status_command"]
+        commit_command = REVISION_CONTROL_COMMANDS["git"]["commit_command"]
+        tag_command = REVISION_CONTROL_COMMANDS["git"]["tag_command"]
+    elif to_path(".hg").exists():
+        status_command = REVISION_CONTROL_COMMANDS["hg"]["status_command"]
+        commit_command = REVISION_CONTROL_COMMANDS["hg"]["commit_command"]
+        tag_command = REVISION_CONTROL_COMMANDS["hg"]["tag_command"]
     else:
         status_command = None
         commit_command = []
         tag_command = []
-        warn('unrecognized revision control system.')
+        warn("could not determine revision control system.")
+        codicil("Expected presence of ./.git or ./.hg.")
 
-    cmdline = docopt(__doc__)
-    Inform(quiet = cmdline['--quiet'])
-    extension = NEW_EXTENSION if cmdline['--trialrun'] else ''
-
-    if cmdline['initialize']:
-        Path(CFG_FILE + extension).write_text(
-            INITIAL_CFG_FILE_CONTENTS.format(**INITIAL_CFG_FILE_VALUES)
-        )
+    # Create initial config file and exit if requested {{{1
+    if cmdline["initialize"]:
+        nt.dump(INITIAL_CFG_FILE_VALUES, CFG_FILE + extension, default=str)
         terminate()
 
-    code = Path(CFG_FILE).read_text()
-    compiled = compile(code, CFG_FILE, 'exec')
-    cfg = INITIAL_CFG_FILE_VALUES
-    cfg['date'] = []
-    cfg['version'] = []
-    exec(compiled, cfg)
+    # Otherwise, read config file {{{1
+    cfg = nt.load(CFG_FILE, top=dict, keymap=(keymap:={}), normalize_key=downcase)
+    cfg = validate_config(cfg)
 
-    date_fmt = cfg['date_fmt']
-    date = cfg['date']
-    version = cfg['version']
-    current_version = '.'.join([
-        str(cfg['major']),
-        str(cfg['minor']),
-        str(cfg['patch'])
-    ])
-    if cmdline['version']:
-        print('{major}.{minor}.{patch}'.format(**cfg))
+    # output version if requested {{{1
+    if cmdline["version"]:
+        output(render_version(cfg))
         terminate()
 
-    if cmdline['major']:
-        cfg['major'] += 1
-        cfg['minor'] = 0
-        cfg['patch'] = 0
-        tag = '%s.%s' % (cfg['major'], cfg['minor'])
-    elif cmdline['minor']:
-        cfg['minor'] += 1
-        cfg['patch'] = 0
-        tag = '%s.%s' % (cfg['major'], cfg['minor'])
-    elif cmdline['patch']:
-        cfg['patch'] += 1
-        tag = None
+    # determine requested level {{{1
+    LEVELS = ["patch", "minor", "major"]
+    requested_level = None
+    for l in LEVELS:
+        if cmdline[l]:
+            assert requested_level is None
+            requested_level = l
+
+    # determine requested type {{{1
+    TYPES = ["dev", "alpha", "beta", "rc", "release"]
+    requested_type = None
+    for t in TYPES:
+        if cmdline[t]:
+            assert requested_type is None
+            requested_type = t
+
+    # determine new version {{{1
+    if cfg["type"] == "release":
+        if requested_level == "major":
+            cfg["major"] += 1
+            cfg["minor"] = 0
+            cfg["patch"] = 0
+            cfg["iteration"] = 0
+            cfg["type"] = "release"
+        elif requested_level == "minor":
+            cfg["minor"] += 1
+            cfg["patch"] = 0
+            cfg["iteration"] = 0
+            cfg["type"] = "release"
+        else:
+            cfg["patch"] += 1
+            cfg["iteration"] = 0
+            cfg["type"] = "release"
+
+        if requested_type:
+            cfg["type"] = requested_type
+
+    elif requested_type == "release":
+        cfg["iteration"] = 0
+        cfg["type"] = "release"
+
     else:
-        raise NotImplementedError
+        if requested_type and requested_type != cfg["type"]:
+            cfg["type"] = requested_type
+            cfg["iteration"] = 0
+        else:
+            cfg["iteration"] += 1
+    new_version = render_version(cfg)
 
-    # check for a clean release
+    # check for a clean release {{{1
     if status_command:
         cmd = status_command.format()
-        try:
-            check = Run(cmd, 'sOeW')
-        except OSError as e:
-            fatal(e, 'when running:', cmd)
-        clean = check.stdout.strip() == ''
-        if cmdline['--trialrun']:
-            display('clean' if clean else 'dirty', 'release.')
+        check = Run(cmd, "sOeW")
+        clean = check.stdout.strip() == ""
+        if cmdline["--trialrun"]:
+            display("clean" if clean else "dirty", "release.")
         if not clean:
-            if cmdline['--trialrun']:
-                warn('uncommitted files.')
+            if cmdline["--trialrun"]:
+                warn("uncommitted files.")
             else:
-                fatal('uncommitted files.')
+                raise Error("uncommitted files.")
 
-    print('Updating to version %s.%s.%s' % (
-        cfg['major'], cfg['minor'], cfg['patch']
-    ))
+    # update the variables {{{1
+    new_date = now().format(DATE_FMT)
+    for path, variables in cfg['files'].items():
+        rm(str(path) + NEW_EXTENSION)
+        contents = orig_contents = path.read_text()
 
-    # update the date
-    new_date = now().format(date_fmt)
-    for pair in date:
-        filename, varname = pair.split(None, 1)
-        rm(filename + NEW_EXTENSION)
-        contents = Path(filename).read_text()
-        matcher = re.compile(ASSIGNMENT_REGEX % (varname, DATE_REGEX))
-        new_assign = r'%s\1\2\3\g<4>%s\5' % (varname, new_date)
-        new_contents = matcher.sub(new_assign, contents)
-        if new_contents != contents:
-            Path(filename + extension).write_text(new_contents)
-            display('date updated.', culprit=filename)
-        elif not cmdline['--quiet']:
-            if not matcher.search(contents):
-                warn('date assignment not found.', culprit=(filename, varname))
+        if 'date' in variables:
+            varname = variables['date']
+            matcher = re.compile(ASSIGNMENT_REGEX.format(varname, DATE_REGEX))
+            new_assign = rf"{varname}\1\2\3\g<4>{new_date}\5"
+            new_contents = matcher.sub(new_assign, contents)
+            if new_contents != contents:
+                display("date updated.", culprit=path)
+                contents = new_contents
+            elif not matcher.search(contents):
+                warn("date assignment not found.", culprit=(path, varname))
 
-    # update the version
-    new_version = '.'.join([
-        str(cfg['major']),
-        str(cfg['minor']),
-        str(cfg['patch'])
-    ])
-    for pair in version:
-        filename, varname = pair.split(None, 1)
-        rm(filename + NEW_EXTENSION)
-        contents = Path(filename).read_text()
-        matcher = re.compile(ASSIGNMENT_REGEX % (varname, VERSION_REGEX))
-        new_assign = r'%s\1\2\3\g<5>%s\5' % (varname, new_version)
-        new_contents = matcher.sub(new_assign, contents)
-        if new_contents != contents:
-            Path(filename + extension).write_text(new_contents)
-            display('version updated.', culprit=filename)
-        elif not cmdline['--quiet']:
-            if not matcher.search(contents):
-                warn('version assignment not found.', culprit=(filename, varname))
+        if 'version' in variables:
+            varname = variables['version']
+            matcher = re.compile(ASSIGNMENT_REGEX.format(varname, VERSION_REGEX))
+            new_assign = rf"{varname}\1\2\3\g<4>{new_version}\5"
+            new_contents = matcher.sub(new_assign, contents)
+            if new_contents != contents:
+                display("version updated.", culprit=path)
+                contents = new_contents
+            elif not matcher.search(contents):
+                warn("version assignment not found.", culprit=(path, varname))
 
-    # update the config file
-    entries = []
-    for k, v in cfg.items():
-        if k[0] != '_':
-            entries.append(f'{k} = {render(v)}')
-    content = '\n'.join(entries) + '\n'
+        if contents != orig_contents:
+            to_path(str(path) + extension).write_text(contents)
+
+    # update the config file {{{1
+    display(f"Updating to version {new_version}.")
     rm(CFG_FILE + NEW_EXTENSION)
-    Path(CFG_FILE + extension).write_text(content)
+    nt.dump(cfg, CFG_FILE + extension, default=str)
 
-    # commit the changes
+    # commit the changes {{{1
     if not is_collection(commit_command):
         commit_command = [commit_command]
     for command in commit_command:
         cmd = command.format(version=new_version)
-        if cmdline['--trialrun']:
+        if cmdline["--trialrun"]:
             display(cmd)
         else:
-            try:
-                Run(cmd, 'soeW')
-            except OSError as e:
-                fatal(e, 'when running:', cmd)
+            Run(cmd, "soeW")
 
-    # tag the commit
-    if tag:
+    # tag the commit {{{1
+    if requested_level in ["major", "minor"] and cfg["type"] == "release":
+        tag = f"{cfg['major']}.{cfg['minor']}"
+        display("applying tag:", tag)
+
         if not is_collection(tag_command):
             tag_command = [tag_command]
+
         for command in tag_command:
             cmd = command.format(version=tag)
-            display('applying tag:', tag)
-            if cmdline['--trialrun']:
+            if cmdline["--trialrun"]:
                 display(cmd)
             else:
-                try:
-                    Run(cmd, 'soeW')
-                except OSError as e:
-                    fatal(e, 'when running:', cmd)
+                Run(cmd, "soeW")
+
+# exceptions {{{1
 except OSError as e:
-    fatal(os_error(e))
+    error(os_error(e))
+except (Error, nt.NestedTextError) as e:
+    e.report()
+except MultipleInvalid as e:
+    for err in e.errors:
+        msg = voluptuous_error_msg_mapings.get(err.msg, err.msg)
+        kind = "key" if "key" in msg else "value"
+        loc = keymap.get(tuple(err.path))
+        codicil = loc.as_line(kind) if loc else None
+        keys = nt.join_keys(err.path, keymap=keymap)
+        error(
+            full_stop(msg),
+            culprit = (CFG_FILE, keys),
+            codicil = codicil
+        )
+terminate()
