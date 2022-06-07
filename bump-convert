@@ -20,7 +20,7 @@ try:
         major = old_cfg['major'],
         minor = old_cfg['minor'],
         patch = old_cfg['patch'],
-        iteration = "0",
+        revision = "0",
         type = "release",
         files = {}
     )

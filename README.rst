@@ -29,7 +29,7 @@ A typical configuration file looks like::
     major: 1
     minor: 6
     patch: 1
-    iteration: 0
+    revision: 0
     type: release
     files:
         teneya/__init__.py:
@@ -43,7 +43,7 @@ will be updated upon a release.  The first, *teneya/__init__.py*, contains
 assignments to variables named *__released* and *__version__*.
 The right-hand side of both should be strings, the first containing the date in 
 the form YYYY-M-D and the second in the form 
-*<major>.<minor>.<patch>[-<type>.<iteration>]*.  For example::
+*<major>.<minor>.<patch>[-<type>.<revision>]*.  For example::
 
     ...
     __version__ = "1.6.1"
@@ -88,7 +88,7 @@ or simply::
     bump            ⟪2.1.1 → 2.1.2⟫
 
 Without an indication of which level to update, the lowest available level is 
-updated.  The lowest available level is *patch* post-release and *iteration* 
+updated.  The lowest available level is *patch* post-release and *revision* 
 pre-release.
 
 You can output the current version using::

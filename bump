@@ -21,8 +21,8 @@ options:
     -q, --quiet     run without narration
     -t, --trialrun  create new files rather than updating existing files
 """
-__version__ = "2.0.0-alpha.0"
-__released__ = "2022-6-5"
+__version__ = "2.0.0-alpha.2"
+__released__ = "2022-06-06"
 
 
 # Imports {{{1
@@ -99,15 +99,15 @@ def as_number(arg):
     raise Invalid("expected whole number.")
 
 def as_release_type(arg):
-    if arg in RELEASE_TYPES:
-        return arg
-    raise Invalid(f"unrecognized type, choose from {conjoin(RELEASE_TYPES)}.")
+    if arg not in RELEASE_TYPES:
+        raise Invalid(f"unrecognized type, choose from {conjoin(RELEASE_TYPES)}.")
+    return arg
 
 def as_path(arg):
     path = to_path(arg)
-    if not path.exists():
-        raise Invalid(f"path does not exist.")
-    return path
+    if path.exists():
+        return path
+    raise Invalid(f"path does not exist.")
 
 def as_identifier(arg):
     if arg.isidentifier():
@@ -118,7 +118,7 @@ validate_config = Schema({
     Required("major"): as_number,
     Required("minor"): as_number,
     Required("patch"): as_number,
-    Required("iteration"): as_number,
+    Required("revision"): as_number,
     Required("type"): as_release_type,
     Required("files"): {as_path: dict(date=as_identifier, version=as_identifier)}
 })
@@ -129,7 +129,7 @@ def render_version(cfg):
     if cfg["type"] == "release":
         return "{major}.{minor}.{patch}".format(**cfg)
     else:
-        return "{major}.{minor}.{patch}-{type}.{iteration}".format(**cfg)
+        return "{major}.{minor}.{patch}-{type}.{revision}".format(**cfg)
 
 try:
     # Read the command line {{{1
@@ -171,7 +171,7 @@ try:
         terminate()
 
     # Otherwise, read config file {{{1
-    cfg = nt.load(CFG_FILE, top=dict, keymap=(keymap:={}), normalize_key=downcase)
+    cfg = nt.load(CFG_FILE, top=dict, keymap=(keymap:={}))
     cfg = validate_config(cfg)
 
     # output version if requested {{{1
@@ -201,31 +201,31 @@ try:
             cfg["major"] += 1
             cfg["minor"] = 0
             cfg["patch"] = 0
-            cfg["iteration"] = 0
+            cfg["revision"] = 0
             cfg["type"] = "release"
         elif requested_level == "minor":
             cfg["minor"] += 1
             cfg["patch"] = 0
-            cfg["iteration"] = 0
+            cfg["revision"] = 0
             cfg["type"] = "release"
         else:
             cfg["patch"] += 1
-            cfg["iteration"] = 0
+            cfg["revision"] = 0
             cfg["type"] = "release"
 
         if requested_type:
             cfg["type"] = requested_type
 
     elif requested_type == "release":
-        cfg["iteration"] = 0
+        cfg["revision"] = 0
         cfg["type"] = "release"
 
     else:
         if requested_type and requested_type != cfg["type"]:
             cfg["type"] = requested_type
-            cfg["iteration"] = 0
+            cfg["revision"] = 0
         else:
-            cfg["iteration"] += 1
+            cfg["revision"] += 1
     new_version = render_version(cfg)
 
     # check for a clean release {{{1
@@ -310,7 +310,7 @@ except (Error, nt.NestedTextError) as e:
 except MultipleInvalid as e:
     for err in e.errors:
         msg = voluptuous_error_msg_mapings.get(err.msg, err.msg)
-        kind = "key" if "key" in msg else "value"
+        kind = "key" if "key" in msg or "path" in msg else "value"
         loc = keymap.get(tuple(err.path))
         codicil = loc.as_line(kind) if loc else None
         keys = nt.join_keys(err.path, keymap=keymap)

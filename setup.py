@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name = 'bump',
-    version = '2.0.0-alpha.0',
+    version = '2.0.0-alpha.2',
     author = 'Ken Kundert',
     description = 'Manage version number and release date.',
     license = 'GPLv3+',
