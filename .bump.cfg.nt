@@ -1,0 +1,11 @@
+major: 2
+minor: 0
+patch: 0
+revision: 4
+type: alpha
+files:
+    bump:
+        date: __released__
+        version: __version__
+    setup.py:
+        version: version
