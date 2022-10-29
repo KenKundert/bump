@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Description {{{1
+# USAGE {{{1
 """
 Bump version and release date.
 
@@ -7,61 +7,101 @@ The directory must be clean (no uncommitted changes) for the bump to occur. Tag
 is applied for minor and major release, but not patches.
 
 usage:
-    bump [options] major [dev|alpha|beta|rc|release]
-    bump [options] minor [dev|alpha|beta|rc|release]
+    bump [options] major [dev|alpha|beta|rc|release|post]
+    bump [options] minor [dev|alpha|beta|rc|release|post]
     bump [options] patch
-    bump [options] [dev|alpha|beta|rc|release]
+    bump [options] [dev|alpha|beta|rc|release|post]
     bump [options]
-    bump initialize
+    bump clean
+    bump initialize [python|semver]
     bump version
-    bump [options] clean
 
 options:
     -h, --help      show this help message and exit
     -q, --quiet     run without narration
     -t, --trialrun  create new files rather than updating existing files
+
+The PEP 440 form of semantic versioning is supported.
 """
-__version__ = "2.0.0-alpha.2"
-__released__ = "2022-06-06"
+__version__ = "2.0.0a6"
+__released__ = "2022-10-28"
 
 
-# Imports {{{1
+# IMPORTS {{{1
 from docopt import docopt
 from inform import (
     Inform, Error,
-    codicil, conjoin, display, error, full_stop, is_collection, os_error,
+    codicil, conjoin, display, error, fatal, full_stop, is_collection, os_error,
     output, terminate, warn,
 )
 from shlib import rm, Run, to_path
 from textwrap import dedent
 from arrow import now
-from voluptuous import Schema, Required, Invalid, MultipleInvalid
+from voluptuous import Schema, Invalid, MultipleInvalid, Optional, Required
 import re
 import nestedtext as nt
 
 
-# Globals {{{1
+# CONSTANTS {{{1
 CFG_FILE = ".bump.cfg.nt"
+
+DEFAULT_STYLE = "python"
+
+STYLES = dict(
+    python = dict(
+        # this is the style recommended for Python by PEP 440
+        dev = ".dev",       # developmental release
+        alpha = "a",        # alpha pre-release
+        beta = "b",         # beta pre-release
+        rc = "rc",          # release candidate (may also use just "c" if you prefer)
+        release = None,     # final release
+        post = ".post",     # post release
+                            # meant for trivial changes only,
+                            # like a change to the release notes
+    ),
+    semver = dict(
+        # this is the style recommended by semver.org
+        dev = "-dev.",      # developmental release
+        alpha = "-alpha.",  # alpha pre-release
+        beta = "-beta.",    # beta pre-release
+        rc = "-rc.",        # release candidate
+        release = None,     # final release
+        post = "-post.",    # post release
+                            # meant for trivial changes only,
+                            # like a change to the release notes)
+    ),
+)
+
+RELEASE_TYPES = set(["dev", "alpha", "beta", "rc", "release", "post"])
+# assure that each style supports the expected release types
+assert STYLES["python"].keys() - RELEASE_TYPES == set()
+assert STYLES["semver"].keys() - RELEASE_TYPES == set()
+
 INITIAL_CFG_FILE_VALUES = dict(
     major = 0,
     minor = 0,
     patch = 0,
-    version = 0,
+    revision = 0,
     type = "release",
-    files = [
-        dict(
-            path="⟪file-path⟫",
+    style = DEFAULT_STYLE,
+    files = {
+        "⟪file-path⟫": dict(
             date="⟪date-variable⟫",
-            version="⟪version-variable⟫"
+            version="⟪version-variable⟫",
         )
-    ]
+    }
 )
-RELEASE_TYPES = ["dev", "alpha", "beta", "rc", "release"]
+
 ASSIGNMENT_REGEX = r"""\b{}(\s*)([:=])(\s*)(["']?){}(['"]?)"""
+
 DATE_FMT = "YYYY-MM-DD"
+
 DATE_REGEX = r"\d\d\d\d-\d?\d-\d?\d"
-VERSION_REGEX = r"\d+\.\d+\.\d+(?:-\w+\.\d+)?"
+
+VERSION_REGEX = r"\d+\.\d+\.\d+(?:(?:a|b|rc|dev|post)\.?\d+)?"
+
 NEW_EXTENSION = ".new"
+
 REVISION_CONTROL_COMMANDS = {
     "git": {
         "status_command": "git status -s",
@@ -81,7 +121,7 @@ REVISION_CONTROL_COMMANDS = {
     },
 }
 
-# create schema for config file {{{2
+# CONFIGURATION SCHEMA {{{1
 voluptuous_error_msg_mapings = {
     "extra keys not allowed": "unknown key",
 }
@@ -103,6 +143,11 @@ def as_release_type(arg):
         raise Invalid(f"unrecognized type, choose from {conjoin(RELEASE_TYPES)}.")
     return arg
 
+def as_style(arg):
+    if arg not in STYLES:
+        raise Invalid(f"unrecognized style, choose from {conjoin(STYLES)}.")
+    return arg
+
 def as_path(arg):
     path = to_path(arg)
     if path.exists():
@@ -120,24 +165,27 @@ validate_config = Schema({
     Required("patch"): as_number,
     Required("revision"): as_number,
     Required("type"): as_release_type,
+    Optional("style"): as_style,
     Required("files"): {as_path: dict(date=as_identifier, version=as_identifier)}
 })
 
 
-# utility functions {{{1
+# UTILITIES {{{1
 def render_version(cfg):
-    if cfg["type"] == "release":
-        return "{major}.{minor}.{patch}".format(**cfg)
+    label = RELEASE_TYPES[cfg["type"]]
+    if label:
+        return f"{{major}}.{{minor}}.{{patch}}{label}{{revision}}".format(**cfg)
     else:
-        return "{major}.{minor}.{patch}-{type}.{revision}".format(**cfg)
+        return f"{{major}}.{{minor}}.{{patch}}".format(**cfg)
 
+# MAIN {{{1
 try:
-    # Read the command line {{{1
+    # Read the command line {{{2
     cmdline = docopt(__doc__)
     Inform(quiet = cmdline["--quiet"])
     extension = NEW_EXTENSION if cmdline["--trialrun"] else ""
 
-    # clean old --trialrun files if requested {{{1
+    # Clean old --trialrun files if requested {{{2
     if cmdline["clean"]:
         to_remove = list(to_path('.').glob("**/*" + NEW_EXTENSION))
         if cmdline["--trialrun"]:
@@ -149,7 +197,7 @@ try:
             rm(to_remove)
         terminate()
 
-    # Determine the revision control system in use {{{1
+    # Determine the revision control system in use {{{2
     if to_path(".git").exists():
         status_command = REVISION_CONTROL_COMMANDS["git"]["status_command"]
         commit_command = REVISION_CONTROL_COMMANDS["git"]["commit_command"]
@@ -165,21 +213,29 @@ try:
         warn("could not determine revision control system.")
         codicil("Expected presence of ./.git or ./.hg.")
 
-    # Create initial config file and exit if requested {{{1
+    # Create initial config file and exit if requested {{{2
     if cmdline["initialize"]:
+        if not extension:
+            if to_path(CFG_FILE).exists():
+                fatal("config file already exists.", culprit=CFG_FILE)
+        if cmdline["python"]:
+            INITIAL_CFG_FILE_VALUES["style"] = "python"
+        if cmdline["semver"]:
+            INITIAL_CFG_FILE_VALUES["style"] = "semver"
         nt.dump(INITIAL_CFG_FILE_VALUES, CFG_FILE + extension, default=str)
         terminate()
 
-    # Otherwise, read config file {{{1
+    # Otherwise, read config file {{{2
     cfg = nt.load(CFG_FILE, top=dict, keymap=(keymap:={}))
     cfg = validate_config(cfg)
+    RELEASE_TYPES = STYLES[cfg.get("style", DEFAULT_STYLE)]
 
-    # output version if requested {{{1
+    # Output version if requested {{{2
     if cmdline["version"]:
         output(render_version(cfg))
         terminate()
 
-    # determine requested level {{{1
+    # Determine requested level {{{2
     LEVELS = ["patch", "minor", "major"]
     requested_level = None
     for l in LEVELS:
@@ -187,15 +243,15 @@ try:
             assert requested_level is None
             requested_level = l
 
-    # determine requested type {{{1
-    TYPES = ["dev", "alpha", "beta", "rc", "release"]
+    # Determine requested type {{{2
+    TYPES = ["dev", "alpha", "beta", "rc", "release", "post"]
     requested_type = None
     for t in TYPES:
         if cmdline[t]:
             assert requested_type is None
             requested_type = t
 
-    # determine new version {{{1
+    # Determine new version {{{2
     if cfg["type"] == "release":
         if requested_level == "major":
             cfg["major"] += 1
@@ -228,7 +284,7 @@ try:
             cfg["revision"] += 1
     new_version = render_version(cfg)
 
-    # check for a clean release {{{1
+    # Check for a clean release {{{2
     if status_command:
         cmd = status_command.format()
         check = Run(cmd, "sOeW")
@@ -241,7 +297,7 @@ try:
             else:
                 raise Error("uncommitted files.")
 
-    # update the variables {{{1
+    # Update the variables {{{2
     new_date = now().format(DATE_FMT)
     for path, variables in cfg['files'].items():
         rm(str(path) + NEW_EXTENSION)
@@ -272,12 +328,12 @@ try:
         if contents != orig_contents:
             to_path(str(path) + extension).write_text(contents)
 
-    # update the config file {{{1
+    # Update the config file {{{2
     display(f"Updating to version {new_version}.")
     rm(CFG_FILE + NEW_EXTENSION)
     nt.dump(cfg, CFG_FILE + extension, default=str)
 
-    # commit the changes {{{1
+    # Commit the changes {{{2
     if not is_collection(commit_command):
         commit_command = [commit_command]
     for command in commit_command:
@@ -287,8 +343,8 @@ try:
         else:
             Run(cmd, "soeW")
 
-    # tag the commit {{{1
-    if requested_level in ["major", "minor"] and cfg["type"] == "release":
+    # Tag the commit {{{2
+    if cfg["patch"] == 0 and cfg["type"] == "release":
         tag = f"{cfg['major']}.{cfg['minor']}"
         display("applying tag:", tag)
 
@@ -302,7 +358,7 @@ try:
             else:
                 Run(cmd, "soeW")
 
-# exceptions {{{1
+# EXCEPTIONS {{{1
 except OSError as e:
     error(os_error(e))
 except (Error, nt.NestedTextError) as e:

@@ -1,6 +1,8 @@
 *bump* is a program for updating the version number of your project.  It uses 
 `semantic versioning <https://semver.org>`_ and will also update the release 
-date if desired.
+date if desired.  It is unique in that it updates both the version number and 
+the release date, whereas most other versioning utilities only update the 
+version number.
 
 
 Installation
@@ -21,8 +23,15 @@ To create initial version of configuration file:
 Configuration file is ``.bump.cfg.nt``.  It is a `NestedText <nestedtext.org>` 
 file.
 
-Set initial values for version number components and indicate the variables that 
-should be updated upon release.
+Edit the configuration file to add the files than must be updated when the 
+version changes and the name of the variables to change.  You can enter as many 
+files as you want.  For example, to update the src/__init__.py file, you could 
+add the following to the configuration file::
+
+    files:
+        src/__init__.py:
+            date: __released__
+            version: __version__
 
 A typical configuration file looks like::
 
@@ -31,15 +40,16 @@ A typical configuration file looks like::
     patch: 1
     revision: 0
     type: release
+    style: semver
     files:
-        teneya/__init__.py:
+        src/__init__.py:
             date: __released__
             version: __version__
-        setup.py:
+        pyproject.toml:
             version: version
 
 It is a `NestedText <nestedtext.org>`_ file. With this configuration, two files 
-will be updated upon a release.  The first, *teneya/__init__.py*, contains 
+will be updated upon a release.  The first, *src/__init__.py*, contains 
 assignments to variables named *__released* and *__version__*.
 The right-hand side of both should be strings, the first containing the date in 
 the form YYYY-M-D and the second in the form 
@@ -50,7 +60,7 @@ the form YYYY-M-D and the second in the form
     __released__ = '2021-01-27'
     ...
 
-The second file, *setup.py*,  contains only a version.  In this case the 
+The second file, *pyproject.toml*,  contains only a version.  In this case the 
 assignment takes the form of a named function argument::
 
     ...
@@ -151,3 +161,54 @@ Finally, you transition to a formal release using::
 
     bump release              ⟪2.2.0-beta.0 → 2.2.0⟫
 
+
+Styles
+------
+
+*bump* supports two versioning styles, both variations of Semantic Versioning.  
+The default style is *python* as specified in `PEP 440 
+<https://peps.python.org/pep-0440>`_.  The second is *semver* as specified in 
+`semver.org <https://semver.org>`_.  The *python* style is more concise of the 
+two and takes the following forms::
+
+    0.9
+    1.0.dev0
+    1.0.dev1
+    1.0.dev2
+    1.0.dev3
+    1.0a0
+    1.0a1
+    1.0b0
+    1.0b1
+    1.0rc0
+    1.0rc1
+    1.0
+    1.0.post0
+    1.1.dev0
+
+The *semver* style takes the following forms::
+
+    0.9
+    1.0-dev.1
+    1.0-dev.2
+    1.0-dev.3
+    1.0-dev.4
+    1.0-alpha.0
+    1.0-alpha.1
+    1.0-beta.0
+    1.0-beta.1
+    1.0-rc.0
+    1.0-rc.1
+    1.0
+    1.0-post.0
+    1.1-dev.0
+
+You declare the style when you first initialize *bump*::
+
+    bump initialize semver
+
+or::
+
+    bump initialize python
+
+If you wish to change the style later, simply edit the configuration file.
