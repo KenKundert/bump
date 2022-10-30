@@ -24,18 +24,29 @@ options:
 If style is python, the compact PEP 440 form of semantic versioning is 
 supported.
 """
-__version__ = "2.0.0a8"
+__version__ = "2.0a10"
 __released__ = "2022-10-29"
 
 
 # IMPORTS {{{1
 from docopt import docopt
 from inform import (
-    Inform, Error,
-    codicil, conjoin, cull, display, error, fatal, full_stop, is_collection,
-    os_error, output, terminate, warn,
+    Inform,
+    Error,
+    codicil,
+    conjoin,
+    cull,
+    display,
+    error,
+    fatal,
+    full_stop,
+    is_collection,
+    os_error,
+    output,
+    terminate,
+    warn,
 )
-from shlib import rm, Run, to_path
+from shlib import rm, Run, to_path, set_prefs
 from textwrap import dedent
 from arrow import now
 from voluptuous import Schema, Invalid, MultipleInvalid, Optional, Required
@@ -44,6 +55,7 @@ import nestedtext as nt
 
 
 # CONSTANTS {{{1
+set_prefs(use_inform=True)
 CFG_FILE = ".bump.cfg.nt"
 
 DEFAULT_STYLE = "python"
@@ -51,12 +63,12 @@ DEFAULT_STYLE = "python"
 STYLES = dict(
     python = dict(
         # this is the style recommended for Python by PEP 440
-        dev = "dev",        # developmental release
+        dev = ".dev",       # developmental release
         alpha = "a",        # alpha pre-release
         beta = "b",         # beta pre-release
         rc = "rc",          # release candidate (may also use just "c" if you prefer)
         release = None,     # final release
-        post = "post",      # post release
+        post = ".post",     # post release
                             # meant for trivial changes only,
                             # like a change to the release notes
     ),
@@ -91,7 +103,7 @@ INITIAL_CFG_FILE_VALUES = dict(
             date="⟪date-variable⟫",
             version="⟪version-variable⟫",
         )
-    }
+    },
 )
 
 ASSIGNMENT_REGEX = r"""\b{}(\s*)([:=])(\s*)(["']?){}(['"]?)"""
@@ -100,7 +112,7 @@ DATE_FMT = "YYYY-MM-DD"
 
 DATE_REGEX = r"\d\d\d\d-\d?\d-\d?\d"
 
-VERSION_REGEX = r"\d+\.\d+\.\d+(?:-?(?:a|b|c|alpha|beta|rc|dev|post)\.?\d+)?"
+VERSION_REGEX = r"\d+\.\d+(?:\.\d+)?(?:[.-]?(?:a|b|c|alpha|beta|rc|dev|post)\.?\d+)?"
 
 NEW_EXTENSION = ".new"
 
@@ -113,7 +125,7 @@ REVISION_CONTROL_COMMANDS = {
         ],
         "tag_command": [
             "git tag -s v{version} -m 'bump version to {version}'",
-            "git push origin v{version}"
+            "git push origin v{version}",
         ],
     },
     "hg": {
@@ -128,8 +140,10 @@ voluptuous_error_msg_mapings = {
     "extra keys not allowed": "unknown key",
 }
 
+
 def downcase(key, _):
     return key.lower()
+
 
 def as_number(arg):
     try:
@@ -140,21 +154,25 @@ def as_number(arg):
         pass
     raise Invalid("expected whole number.")
 
+
 def as_release_type(arg):
     if arg not in RELEASE_TYPES:
         raise Invalid(f"unrecognized type, choose from {conjoin(RELEASE_TYPES)}.")
     return arg
+
 
 def as_style(arg):
     if arg not in STYLES:
         raise Invalid(f"unrecognized style, choose from {conjoin(STYLES)}.")
     return arg
 
+
 def as_path(arg):
     path = to_path(arg)
     if path.exists():
         return path
     raise Invalid(f"path does not exist.")
+
 
 def as_identifier(arg):
     if arg.isidentifier():
@@ -176,13 +194,16 @@ validate_config = Schema({
 # render_verison() {{{2
 def render_version(cfg):
     version = f"{cfg['major']}.{cfg['minor']}.{cfg['patch']}"
-    if cfg['type'] == 'release':
-        assert cfg['revision'] == 0
+    if cfg["style"] == "python" and cfg["patch"] == 0:
+        version = f"{cfg['major']}.{cfg['minor']}"
+    if cfg["type"] == "release":
+        assert cfg["revision"] == 0
         return version
     else:
-        assert cfg['revision'] != 0
+        assert cfg["revision"] != 0
         qualifier = f"{RELEASE_TYPE_NAMES[cfg['type']]}{cfg['revision']}"
         return f"{version}{qualifier}"
+
 
 # major_bump() {{{2
 def major_bump(cfg):
@@ -192,6 +213,7 @@ def major_bump(cfg):
     cfg["revision"] = 0
     cfg["type"] = "release"
 
+
 # minor_bump() {{{2
 def minor_bump(cfg):
     cfg["minor"] += 1
@@ -199,15 +221,18 @@ def minor_bump(cfg):
     cfg["revision"] = 0
     cfg["type"] = "release"
 
+
 # patch_bump() {{{2
 def patch_bump(cfg):
     cfg["patch"] += 1
     cfg["revision"] = 0
     cfg["type"] = "release"
 
+
 # revision_bump() {{{2
 def revision_bump(cfg):
     cfg["revision"] += 1
+
 
 # revision_reset() {{{2
 def revision_reset(cfg, new_type):
@@ -219,12 +244,12 @@ def revision_reset(cfg, new_type):
 try:
     # Read the command line {{{2
     cmdline = docopt(__doc__)
-    Inform(quiet = cmdline["--quiet"])
+    Inform(quiet=cmdline["--quiet"])
     extension = NEW_EXTENSION if cmdline["--trialrun"] else ""
 
     # Clean old --trialrun files if requested {{{2
     if cmdline["clean"]:
-        to_remove = list(to_path('.').glob("**/*" + NEW_EXTENSION))
+        to_remove = list(to_path(".").glob("**/*" + NEW_EXTENSION))
         if cmdline["--trialrun"]:
             if to_remove:
                 output("To remove:", *to_remove, sep="\n    ")
@@ -265,7 +290,9 @@ try:
     # Otherwise, read config file {{{2
     cfg = nt.load(CFG_FILE, top=dict, keymap=(keymap:={}))
     cfg = validate_config(cfg)
-    RELEASE_TYPE_NAMES = STYLES[cfg.get("style", DEFAULT_STYLE)]
+    style = cfg.get("style", DEFAULT_STYLE)
+    cfg["style"] = style
+    RELEASE_TYPE_NAMES = STYLES[style]
 
     # Output version if requested {{{2
     if cmdline["version"]:
@@ -289,7 +316,6 @@ try:
 
     # Determine new version {{{2
     previous_type = cfg["type"]
-    #debug(previous_type, requested_level, previous_type)
     if requested_level in ["major", "minor", "patch"]:
         if requested_level == "major":
             major_bump(cfg)
@@ -319,7 +345,7 @@ try:
     # Check for a clean release {{{2
     if status_command:
         cmd = status_command.format()
-        check = Run(cmd, "sOeW")
+        check = Run(cmd, "sOEW")
         clean = check.stdout.strip() == ""
         if cmdline["--trialrun"]:
             display("clean" if clean else "dirty", "release.")
@@ -331,12 +357,12 @@ try:
 
     # Update the variables {{{2
     new_date = now().format(DATE_FMT)
-    for path, variables in cfg['files'].items():
+    for path, variables in cfg["files"].items():
         rm(str(path) + NEW_EXTENSION)
         contents = orig_contents = path.read_text()
 
-        if 'date' in variables:
-            varname = variables['date']
+        if "date" in variables:
+            varname = variables["date"]
             matcher = re.compile(ASSIGNMENT_REGEX.format(varname, DATE_REGEX))
             new_assign = rf"{varname}\1\2\3\g<4>{new_date}\5"
             new_contents = matcher.sub(new_assign, contents)
@@ -346,8 +372,8 @@ try:
             elif not matcher.search(contents):
                 warn("date assignment not found.", culprit=(path, varname))
 
-        if 'version' in variables:
-            varname = variables['version']
+        if "version" in variables:
+            varname = variables["version"]
             matcher = re.compile(ASSIGNMENT_REGEX.format(varname, VERSION_REGEX))
             new_assign = rf"{varname}\1\2\3\g<4>{new_version}\5"
             new_contents = matcher.sub(new_assign, contents)
@@ -373,7 +399,7 @@ try:
         if cmdline["--trialrun"]:
             display(cmd)
         else:
-            Run(cmd, "soeW")
+            Run(cmd, "sOEW")
 
     # Tag the commit {{{2
     if cfg["patch"] == 0 and cfg["type"] == "release":
@@ -388,13 +414,13 @@ try:
             if cmdline["--trialrun"]:
                 display(cmd)
             else:
-                Run(cmd, "soeW")
+                Run(cmd, "sOEW")
 
 # EXCEPTIONS {{{1
 except OSError as e:
     error(os_error(e))
 except (Error, nt.NestedTextError) as e:
-    e.report()
+    e.report(codicil=cull((e.cmd, e.stdout)))
 except MultipleInvalid as e:
     for err in e.errors:
         msg = voluptuous_error_msg_mapings.get(err.msg, err.msg)
@@ -402,9 +428,5 @@ except MultipleInvalid as e:
         loc = keymap.get(tuple(err.path))
         codicil = loc.as_line(kind) if loc else None
         keys = nt.join_keys(err.path, keymap=keymap)
-        error(
-            full_stop(msg),
-            culprit = (CFG_FILE, keys),
-            codicil = codicil
-        )
+        error(full_stop(msg), culprit=(CFG_FILE, keys), codicil=codicil)
 terminate()

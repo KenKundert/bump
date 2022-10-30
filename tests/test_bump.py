@@ -48,7 +48,7 @@ def test_python():
             bump = Run('bump initialize python', 'soEW')
 
             # create file to contain version information
-            info_contents = dict(__released__ = '1969-07-20', __version__='0.0.0')
+            info_contents = dict(__released__ = '1969-07-20', __version__='0.0')
             nt.dump(info_contents, info_path)
 
             # update bump config file to include version info file
@@ -59,8 +59,8 @@ def test_python():
             nt.dump(bump_cfg, bump_cfg_path)
 
             # check initial versions of bump config file and info file
-            check_version(0, 0, 0, 0, 'release', 'python', '0.0.0')
-            check_file('0.0.0', '1969-07-20')
+            check_file('0.0', '1969-07-20')
+            check_version(0, 0, 0, 0, 'release', 'python', '0.0')
 
             # add files to mercurial and check them in
             hg = Run(f'hg add {bump_cfg_path!s} {info_path!s}', 'sOEW')
@@ -75,20 +75,20 @@ def test_python():
             check_version(0, 0, 2, 0, 'release', 'python', '0.0.2')
 
             bump = Run('bump minor', 'soEW')
-            check_file('0.1.0')
-            check_version(0, 1, 0, 0, 'release', 'python', '0.1.0')
+            check_file('0.1')
+            check_version(0, 1, 0, 0, 'release', 'python', '0.1')
 
             bump = Run('bump', 'soEW')
             check_file('0.1.1')
             check_version(0, 1, 1, 0, 'release', 'python', '0.1.1')
 
             bump = Run('bump dev', 'soEW')
-            check_file('0.1.2dev1')
-            check_version(0, 1, 2, 1, 'dev', 'python', '0.1.2dev1')
+            check_file('0.1.2.dev1')
+            check_version(0, 1, 2, 1, 'dev', 'python', '0.1.2.dev1')
 
             bump = Run('bump', 'soEW')
-            check_file('0.1.2dev2')
-            check_version(0, 1, 2, 2, 'dev', 'python', '0.1.2dev2')
+            check_file('0.1.2.dev2')
+            check_version(0, 1, 2, 2, 'dev', 'python', '0.1.2.dev2')
 
             bump = Run('bump alpha', 'soEW')
             check_file('0.1.2a1')
@@ -119,102 +119,102 @@ def test_python():
             check_version(0, 1, 2, 0, 'release', 'python', '0.1.2')
 
             bump = Run('bump post', 'soEW')
-            check_file('0.1.2post1')
-            check_version(0, 1, 2, 1, 'post', 'python', '0.1.2post1')
+            check_file('0.1.2.post1')
+            check_version(0, 1, 2, 1, 'post', 'python', '0.1.2.post1')
 
             bump = Run('bump post', 'soEW')
-            check_file('0.1.2post2')
-            check_version(0, 1, 2, 2, 'post', 'python', '0.1.2post2')
+            check_file('0.1.2.post2')
+            check_version(0, 1, 2, 2, 'post', 'python', '0.1.2.post2')
 
             bump = Run('bump', 'soEW')
-            check_file('0.1.2post3')
-            check_version(0, 1, 2, 3, 'post', 'python', '0.1.2post3')
+            check_file('0.1.2.post3')
+            check_version(0, 1, 2, 3, 'post', 'python', '0.1.2.post3')
 
             bump = Run('bump release', 'sOEW1')
             assert bump.stdout.strip() == "bump error: release: no longer available."
             assert bump.status == 1
-            check_file('0.1.2post3')
-            check_version(0, 1, 2, 3, 'post', 'python', '0.1.2post3')
+            check_file('0.1.2.post3')
+            check_version(0, 1, 2, 3, 'post', 'python', '0.1.2.post3')
 
             bump = Run('bump minor dev', 'soEW')
-            check_file('0.2.0dev1')
-            check_version(0, 2, 0, 1, 'dev', 'python', '0.2.0dev1')
+            check_file('0.2.dev1')
+            check_version(0, 2, 0, 1, 'dev', 'python', '0.2.dev1')
 
             bump = Run('bump dev', 'soEW')
-            check_file('0.2.0dev2')
-            check_version(0, 2, 0, 2, 'dev', 'python', '0.2.0dev2')
+            check_file('0.2.dev2')
+            check_version(0, 2, 0, 2, 'dev', 'python', '0.2.dev2')
 
             bump = Run('bump', 'soEW')
-            check_file('0.2.0dev3')
-            check_version(0, 2, 0, 3, 'dev', 'python', '0.2.0dev3')
+            check_file('0.2.dev3')
+            check_version(0, 2, 0, 3, 'dev', 'python', '0.2.dev3')
 
             bump = Run('bump alpha', 'soEW')
-            check_file('0.2.0a1')
-            check_version(0, 2, 0, 1, 'alpha', 'python', '0.2.0a1')
+            check_file('0.2a1')
+            check_version(0, 2, 0, 1, 'alpha', 'python', '0.2a1')
 
             bump = Run('bump post', 'sOEW1')
             assert bump.stdout.strip() == "bump error: not yet released."
             assert bump.status == 1
-            check_file('0.2.0a1')
-            check_version(0, 2, 0, 1, 'alpha', 'python', '0.2.0a1')
+            check_file('0.2a1')
+            check_version(0, 2, 0, 1, 'alpha', 'python', '0.2a1')
 
             bump = Run('bump minor rc', 'soEW')
-            check_file('0.3.0rc1')
-            check_version(0, 3, 0, 1, 'rc', 'python', '0.3.0rc1')
+            check_file('0.3rc1')
+            check_version(0, 3, 0, 1, 'rc', 'python', '0.3rc1')
 
             bump = Run('bump', 'soEW')
-            check_file('0.3.0rc2')
-            check_version(0, 3, 0, 2, 'rc', 'python', '0.3.0rc2')
+            check_file('0.3rc2')
+            check_version(0, 3, 0, 2, 'rc', 'python', '0.3rc2')
 
             bump = Run('bump release', 'soEW')
-            check_file('0.3.0')
-            check_version(0, 3, 0, 0, 'release', 'python', '0.3.0')
+            check_file('0.3')
+            check_version(0, 3, 0, 0, 'release', 'python', '0.3')
 
             bump = Run('bump post', 'soEW')
-            check_file('0.3.0post1')
-            check_version(0, 3, 0, 1, 'post', 'python', '0.3.0post1')
+            check_file('0.3.post1')
+            check_version(0, 3, 0, 1, 'post', 'python', '0.3.post1')
 
             bump = Run('bump', 'soEW')
-            check_file('0.3.0post2')
-            check_version(0, 3, 0, 2, 'post', 'python', '0.3.0post2')
+            check_file('0.3.post2')
+            check_version(0, 3, 0, 2, 'post', 'python', '0.3.post2')
 
             bump = Run('bump patch', 'soEW')
             check_file('0.3.1')
             check_version(0, 3, 1, 0, 'release', 'python', '0.3.1')
 
             bump = Run('bump post', 'soEW')
-            check_file('0.3.1post1')
-            check_version(0, 3, 1, 1, 'post', 'python', '0.3.1post1')
+            check_file('0.3.1.post1')
+            check_version(0, 3, 1, 1, 'post', 'python', '0.3.1.post1')
 
             bump = Run('bump alpha', 'sOEW1')
             assert bump.stdout.strip() == "bump error: alpha: no longer available."
             assert bump.status == 1
-            check_file('0.3.1post1')
-            check_version(0, 3, 1, 1, 'post', 'python', '0.3.1post1')
+            check_file('0.3.1.post1')
+            check_version(0, 3, 1, 1, 'post', 'python', '0.3.1.post1')
 
             bump = Run('bump patch', 'soEW')
             check_file('0.3.2')
             check_version(0, 3, 2, 0, 'release', 'python', '0.3.2')
 
             bump = Run('bump post', 'soEW')
-            check_file('0.3.2post1')
-            check_version(0, 3, 2, 1, 'post', 'python', '0.3.2post1')
+            check_file('0.3.2.post1')
+            check_version(0, 3, 2, 1, 'post', 'python', '0.3.2.post1')
 
             bump = Run('bump beta', 'sOEW1')
             assert bump.stdout.strip() == "bump error: beta: no longer available."
             assert bump.status == 1
-            check_file('0.3.2post1')
-            check_version(0, 3, 2, 1, 'post', 'python', '0.3.2post1')
+            check_file('0.3.2.post1')
+            check_version(0, 3, 2, 1, 'post', 'python', '0.3.2.post1')
 
             bump = Run('bump release', 'sOEW1')
             assert bump.stdout.strip() == "bump error: release: no longer available."
             assert bump.status == 1
-            check_file('0.3.2post1')
-            check_version(0, 3, 2, 1, 'post', 'python', '0.3.2post1')
+            check_file('0.3.2.post1')
+            check_version(0, 3, 2, 1, 'post', 'python', '0.3.2.post1')
 
             bump = Run('bump major', 'soEW')
-            check_file('1.0.0')
-            check_version(1, 0, 0, 0, 'release', 'python', '1.0.0')
+            check_file('1.0')
+            check_version(1, 0, 0, 0, 'release', 'python', '1.0')
 
     except Error as e:
         print('STDOUT:', e.stdout)

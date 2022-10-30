@@ -1,8 +1,9 @@
 major: 2
 minor: 0
 patch: 0
-revision: 8
+revision: 10
 type: alpha
+style: python
 files:
     bump:
         date: __released__
