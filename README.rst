@@ -1,14 +1,21 @@
+bump — Semantic Versioning
+==========================
+
+:Author: Ken Kundert
+:Version: 2.0.0a8
+:Released: 2022-10-29
+
 *bump* is a program for updating the version number of your project.  It uses 
 `semantic versioning <https://semver.org>`_ and will also update the release 
 date if desired.  It is unique in that it updates both the version number and 
 the release date, whereas most other versioning utilities only update the 
-version number.
+version number.  It also supports Python and SemVer styles.
 
 
 Installation
 ------------
 
-Install using
+Install using::
 
     pip3 install .
 
@@ -16,12 +23,12 @@ Install using
 Configuration
 -------------
 
-To create initial version of configuration file:
+To create initial version of configuration file::
 
     bump initialize
 
-Configuration file is ``.bump.cfg.nt``.  It is a `NestedText <nestedtext.org>` 
-file.
+Configuration file is ``.bump.cfg.nt``.  It is a `NestedText 
+<https://nestedtext.org>`_ file.
 
 Edit the configuration file to add the files than must be updated when the 
 version changes and the name of the variables to change.  You can enter as many 
@@ -48,9 +55,9 @@ A typical configuration file looks like::
         pyproject.toml:
             version: version
 
-It is a `NestedText <nestedtext.org>`_ file. With this configuration, two files 
-will be updated upon a release.  The first, *src/__init__.py*, contains 
-assignments to variables named *__released* and *__version__*.
+With this configuration, two files will be updated upon a release.  The first, 
+*src/__init__.py*, contains assignments to variables named *__released* and 
+*__version__*.
 The right-hand side of both should be strings, the first containing the date in 
 the form YYYY-M-D and the second in the form 
 *<major>.<minor>.<patch>[-<type>.<revision>]*.  For example::
@@ -164,13 +171,14 @@ You transition to a formal release using::
 
     bump release              ⟪2.2.0-beta.0 → 2.2.0⟫
 
-Then you can do a post release:
+Then you can do a post release::
 
     bump post                 ⟪2.2.0 → 2.2.0-post.0⟫
 
-And another:
+And another::
 
     bump post                 ⟪2.2.0-post.0 → 2.2.0-post.1⟫
+
 
 Styles
 ------
