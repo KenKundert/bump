@@ -105,8 +105,8 @@ You can output the current version using::
 
     bump version
 
-Pre-releases are also supported.  There are 4 kinds, *dev*, *alpha*, *beta* and 
-*rc*.  They have the following meanings:
+Pre-releases and post-releases are also supported.  There are 5 kinds, *dev*, 
+*alpha*, *beta*, *rc*, and *post*.  They have the following meanings:
 
 *dev*:
     Development version: not intended for general use.
@@ -121,7 +121,10 @@ Pre-releases are also supported.  There are 4 kinds, *dev*, *alpha*, *beta* and
     Release candidate: the final step in release process, believed ready for 
     release.
 
-*release*: A released version.
+*post*:
+    Post release version.  A post release corrects some address minor errors in 
+    a final release that do not affect the distributed software, such as a fix 
+    of the release notes.
 
 For example, consider a project that has just done a minor release, say 1.2, and 
 is now commencing the development of a new feature.  The initial subsequent 
@@ -157,10 +160,17 @@ Notice that the phase jumped from *dev* to *beta*, bypassing *alpha*.  It is not
 necessary to go through all the phases, but you should go through them in the 
 proper order.
 
-Finally, you transition to a formal release using::
+You transition to a formal release using::
 
     bump release              ⟪2.2.0-beta.0 → 2.2.0⟫
 
+Then you can do a post release:
+
+    bump post                 ⟪2.2.0 → 2.2.0-post.0⟫
+
+And another:
+
+    bump post                 ⟪2.2.0-post.0 → 2.2.0-post.1⟫
 
 Styles
 ------

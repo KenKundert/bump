@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
 set nonomatch
-#rm -f ec.1 ec.1.rst ec.1.pdf
-rm -rf generated_settings
 
 # the rest is common to all python directories
 rm -f *.pyc *.pyo .test*.sum expected result install.out
@@ -13,15 +11,5 @@ do
     then
         break
     fi
-    #echo $i
     ( cd ${i%/*}; ./clean )
-done
-for i in */Makefile
-do
-    if [[ "$i" == '*/Makefile' ]]
-    then
-        break
-    fi
-    #echo $i
-    ( cd ${i%/*}; make clean )
 done

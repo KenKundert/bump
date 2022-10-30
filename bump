@@ -21,7 +21,8 @@ options:
     -q, --quiet     run without narration
     -t, --trialrun  create new files rather than updating existing files
 
-The PEP 440 form of semantic versioning is supported.
+If style is python, the compact PEP 440 form of semantic versioning is 
+supported.
 """
 __version__ = "2.0.0a6"
 __released__ = "2022-10-28"
@@ -31,8 +32,8 @@ __released__ = "2022-10-28"
 from docopt import docopt
 from inform import (
     Inform, Error,
-    codicil, conjoin, display, error, fatal, full_stop, is_collection, os_error,
-    output, terminate, warn,
+    codicil, conjoin, cull, display, error, fatal, full_stop, is_collection,
+    os_error, output, terminate, warn,
 )
 from shlib import rm, Run, to_path
 from textwrap import dedent
@@ -50,12 +51,12 @@ DEFAULT_STYLE = "python"
 STYLES = dict(
     python = dict(
         # this is the style recommended for Python by PEP 440
-        dev = ".dev",       # developmental release
+        dev = "dev",        # developmental release
         alpha = "a",        # alpha pre-release
         beta = "b",         # beta pre-release
         rc = "rc",          # release candidate (may also use just "c" if you prefer)
         release = None,     # final release
-        post = ".post",     # post release
+        post = "post",      # post release
                             # meant for trivial changes only,
                             # like a change to the release notes
     ),
@@ -72,10 +73,11 @@ STYLES = dict(
     ),
 )
 
-RELEASE_TYPES = set(["dev", "alpha", "beta", "rc", "release", "post"])
+# give available release types in the order they must be given in
+RELEASE_TYPES = ["dev", "alpha", "beta", "rc", "release", "post"]
 # assure that each style supports the expected release types
-assert STYLES["python"].keys() - RELEASE_TYPES == set()
-assert STYLES["semver"].keys() - RELEASE_TYPES == set()
+assert STYLES["python"].keys() - set(RELEASE_TYPES) == set()
+assert STYLES["semver"].keys() - set(RELEASE_TYPES) == set()
 
 INITIAL_CFG_FILE_VALUES = dict(
     major = 0,
@@ -98,7 +100,7 @@ DATE_FMT = "YYYY-MM-DD"
 
 DATE_REGEX = r"\d\d\d\d-\d?\d-\d?\d"
 
-VERSION_REGEX = r"\d+\.\d+\.\d+(?:(?:a|b|rc|dev|post)\.?\d+)?"
+VERSION_REGEX = r"\d+\.\d+\.\d+(?:-?(?:a|b|c|alpha|beta|rc|dev|post)\.?\d+)?"
 
 NEW_EXTENSION = ".new"
 
@@ -171,12 +173,47 @@ validate_config = Schema({
 
 
 # UTILITIES {{{1
+# render_verison() {{{2
 def render_version(cfg):
-    label = RELEASE_TYPES[cfg["type"]]
-    if label:
-        return f"{{major}}.{{minor}}.{{patch}}{label}{{revision}}".format(**cfg)
+    version = f"{cfg['major']}.{cfg['minor']}.{cfg['patch']}"
+    if cfg['type'] == 'release':
+        assert cfg['revision'] == 0
+        return version
     else:
-        return f"{{major}}.{{minor}}.{{patch}}".format(**cfg)
+        assert cfg['revision'] != 0
+        qualifier = f"{RELEASE_TYPE_NAMES[cfg['type']]}{cfg['revision']}"
+        return f"{version}{qualifier}"
+
+# major_bump() {{{2
+def major_bump(cfg):
+    cfg["major"] += 1
+    cfg["minor"] = 0
+    cfg["patch"] = 0
+    cfg["revision"] = 0
+    cfg["type"] = "release"
+
+# minor_bump() {{{2
+def minor_bump(cfg):
+    cfg["minor"] += 1
+    cfg["patch"] = 0
+    cfg["revision"] = 0
+    cfg["type"] = "release"
+
+# patch_bump() {{{2
+def patch_bump(cfg):
+    cfg["patch"] += 1
+    cfg["revision"] = 0
+    cfg["type"] = "release"
+
+# revision_bump() {{{2
+def revision_bump(cfg):
+    cfg["revision"] += 1
+
+# revision_reset() {{{2
+def revision_reset(cfg, new_type):
+    cfg["type"] = new_type
+    cfg["revision"] = 0 if new_type == "release" else 1
+
 
 # MAIN {{{1
 try:
@@ -228,7 +265,7 @@ try:
     # Otherwise, read config file {{{2
     cfg = nt.load(CFG_FILE, top=dict, keymap=(keymap:={}))
     cfg = validate_config(cfg)
-    RELEASE_TYPES = STYLES[cfg.get("style", DEFAULT_STYLE)]
+    RELEASE_TYPE_NAMES = STYLES[cfg.get("style", DEFAULT_STYLE)]
 
     # Output version if requested {{{2
     if cmdline["version"]:
@@ -244,44 +281,39 @@ try:
             requested_level = l
 
     # Determine requested type {{{2
-    TYPES = ["dev", "alpha", "beta", "rc", "release", "post"]
     requested_type = None
-    for t in TYPES:
+    for t in RELEASE_TYPES:
         if cmdline[t]:
             assert requested_type is None
             requested_type = t
 
     # Determine new version {{{2
-    if cfg["type"] == "release":
+    previous_type = cfg["type"]
+    #debug(previous_type, requested_level, previous_type)
+    if requested_level in ["major", "minor", "patch"]:
         if requested_level == "major":
-            cfg["major"] += 1
-            cfg["minor"] = 0
-            cfg["patch"] = 0
-            cfg["revision"] = 0
-            cfg["type"] = "release"
+            major_bump(cfg)
         elif requested_level == "minor":
-            cfg["minor"] += 1
-            cfg["patch"] = 0
-            cfg["revision"] = 0
-            cfg["type"] = "release"
+            minor_bump(cfg)
         else:
-            cfg["patch"] += 1
-            cfg["revision"] = 0
-            cfg["type"] = "release"
-
-        if requested_type:
-            cfg["type"] = requested_type
-
-    elif requested_type == "release":
-        cfg["revision"] = 0
-        cfg["type"] = "release"
-
+            patch_bump(cfg)
+        if requested_type and requested_type != "release":
+            revision_reset(cfg, requested_type)
+    elif previous_type == "release":
+        if requested_type == "post":
+            revision_reset(cfg, requested_type)
+        else:
+            patch_bump(cfg)
+            if requested_type not in [None, "release"]:
+                revision_reset(cfg, requested_type)
+    elif previous_type == requested_type or requested_type is None:
+        revision_bump(cfg)
     else:
-        if requested_type and requested_type != cfg["type"]:
-            cfg["type"] = requested_type
-            cfg["revision"] = 0
-        else:
-            cfg["revision"] += 1
+        if requested_type == "post":
+            raise Error("not yet released.")
+        if RELEASE_TYPES.index(previous_type) > RELEASE_TYPES.index(requested_type):
+            raise Error("no longer available.", culprit=requested_type)
+        revision_reset(cfg, requested_type)
     new_version = render_version(cfg)
 
     # Check for a clean release {{{2
