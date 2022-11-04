@@ -1,0 +1,14 @@
+__pycache__/
+repo
+
+# Distribution / packaging
+.Python
+build/
+dist/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+MANIFEST
+.*.swp
+doc/.build
