@@ -2,8 +2,8 @@ bump — Semantic Versioning
 ==========================
 
 :Author: Ken Kundert
-:Version: 2.0a10
-:Released: 2022-10-29
+:Version: 2.0
+:Released: 2023-04-08
 
 *bump* is a program for updating the version number of your project.  It uses 
 `semantic versioning <https://semver.org>`_ and will also update the release 

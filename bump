@@ -24,8 +24,8 @@ options:
 If style is python, the compact PEP 440 form of semantic versioning is 
 supported.
 """
-__version__ = "2.0a10"
-__released__ = "2022-10-29"
+__version__ = "2.0"
+__released__ = "2023-04-08"
 
 
 # IMPORTS {{{1
