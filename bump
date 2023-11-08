@@ -20,6 +20,7 @@ options:
     -h, --help      show this help message and exit
     -q, --quiet     run without narration
     -t, --trialrun  create new files rather than updating existing files
+    -n, --no-tag    do not tag the release
 
 If style is python, the compact PEP 440 form of semantic versioning is 
 supported.
@@ -409,9 +410,11 @@ try:
         if not is_collection(tag_command):
             tag_command = [tag_command]
 
+        if cmdline["--no-tag"]:
+            display("\nSkipping the following commands (run them later).")
         for command in tag_command:
             cmd = command.format(version=tag)
-            if cmdline["--trialrun"]:
+            if cmdline["--trialrun"] or cmdline["--no-tag"]:
                 display(cmd)
             else:
                 Run(cmd, "sOEW")
